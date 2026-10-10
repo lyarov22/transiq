@@ -1,4 +1,4 @@
-import { read } from "xlsx";
+import { read, type WorkSheet } from "xlsx";
 import {
   GtfsCalendarDateException,
   GtfsStopAccess,
@@ -30,6 +30,25 @@ import { parseCalendarRange } from "./calendar";
 import { HOLIDAYS } from "../utils/holidays";
 
 export const STOP_COLUMN = "B";
+
+/**
+ * The last row that names a stop.
+ *
+ * The stop list ends where the stop column ends, not where a trip's column does:
+ * a run need not call at every stop, so its own cells have gaps.
+ */
+function lastStopRow(sheet: WorkSheet): number {
+  let last = 0;
+
+  for (const address of Object.keys(sheet)) {
+    const match = address.match(/^([A-Z]+)(\d+)$/);
+    if (match && match[1] === STOP_COLUMN && sheet[address]?.v) {
+      last = Math.max(last, Number(match[2]));
+    }
+  }
+
+  return last;
+}
 
 export enum Sheet {
   INBOUND = "Smer tam",
@@ -87,6 +106,8 @@ export function parseRouteTripsCalendarsAndStopTimes(
     [outboundSheet, GtfsTripDirection.OUTBOUND],
   ] as const) {
     if (!sheet) continue;
+
+    const lastRow = lastStopRow(sheet);
 
     const tripCells = filterCells(sheet, (key, cell) => {
       return (
@@ -264,13 +285,17 @@ export function parseRouteTripsCalendarsAndStopTimes(
       let rowIndex = 5;
       let stopSequence = 1;
 
-      while (true) {
+      while (rowIndex <= lastRow) {
         const timeCell = sheet[`${tripCellColumn}${rowIndex}`];
         const stopCell = sheet[`${STOP_COLUMN}${rowIndex}`];
         const noteCell = sheet[`C${rowIndex}`];
 
+        // A blank cell means this run does not call at this stop. A run that
+        // begins at an intermediate stop is blank above its first time, and one
+        // that ends early is blank below its last; neither is the end of the run.
         if (!timeCell || !timeCell.v) {
-          break;
+          rowIndex++;
+          continue;
         }
 
         if (!stopCell || !stopCell.v) {
@@ -342,8 +367,13 @@ export function parseRouteTripsCalendarsAndStopTimes(
         rowIndex++;
       }
 
-      trips.push(trip);
-      calendars.push(calendar);
+      // `stopSequence` is one past the number of timed stops. A trip with fewer
+      // than two of them is not a trip a router can board, and a trip without
+      // stop_times is invalid GTFS.
+      if (stopSequence > 2) {
+        trips.push(trip);
+        calendars.push(calendar);
+      }
     }
   }
 
