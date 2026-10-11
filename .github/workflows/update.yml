@@ -1,8 +1,9 @@
 name: Update GTFS Data and View
 
+# Not on a schedule in this fork: the timetables are built on our own server
+# (deploy/build-timetables.sh in punkto), and a second daily crawl of the portal
+# from here would only double what it is asked.
 on:
-  schedule:
-    - cron: "0 0 * * *"
   workflow_dispatch:
 
 permissions:
