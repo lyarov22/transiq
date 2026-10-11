@@ -3,6 +3,8 @@ import iconv from "iconv-lite";
 
 export interface PagerOptions {
   baseUrl: string;
+  /** Milliseconds to wait before every request but the first of a run. */
+  delayMs?: number;
   pageParam?: string;
   startPage?: number;
   endPage?: number;
@@ -53,6 +55,18 @@ async function decodeResponseBody(
   return new TextDecoder().decode(buffer);
 }
 
+/**
+ * One request at a time, with a gap between them: the portal is somebody else's
+ * server, and a crawl is a guest. Shared by the pager and the downloads so that
+ * the gap is kept between *any* two requests of a run, not only between pages.
+ */
+let lastRequestAt = 0;
+export async function pause(delayMs: number): Promise<void> {
+  const wait = lastRequestAt + delayMs - Date.now();
+  if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+  lastRequestAt = Date.now();
+}
+
 export async function* fetchPages(
   options: PagerOptions,
 ): AsyncGenerator<PageResult, void, unknown> {
@@ -65,6 +79,7 @@ export async function* fetchPages(
     shouldStop,
     fetchOptions = {},
     encodings = [],
+    delayMs = 0,
   } = options;
 
   let currentPage = startPage;
@@ -78,6 +93,7 @@ export async function* fetchPages(
     const finalUrl = url.toString();
     console.log(`Fetching page ${currentPage}: ${finalUrl}`);
 
+    await pause(delayMs);
     const response = await fetch(finalUrl, fetchOptions);
 
     if (!response.ok) {
@@ -120,6 +136,8 @@ export async function processNestedPages<T>({
   outerParam,
   outerStartPage = 0,
   outerEndPage = Number.MAX_SAFE_INTEGER,
+  outerPages,
+  delayMs = 0,
   innerParam,
   innerStartPage = 0,
   innerEndPage = Number.MAX_SAFE_INTEGER,
@@ -134,6 +152,10 @@ export async function processNestedPages<T>({
   outerParam: string;
   outerStartPage?: number;
   outerEndPage?: number;
+  /** Visit exactly these outer pages, in this order, instead of the range. */
+  outerPages?: number[];
+  /** Milliseconds between any two requests. */
+  delayMs?: number;
   innerParam: string;
   innerStartPage?: number;
   innerEndPage?: number;
@@ -147,10 +169,17 @@ export async function processNestedPages<T>({
   ) => boolean | Promise<boolean>;
   fetchOptions?: RequestInit;
   encodings?: string[];
-  processOuterPage: (firstInnerPage: NestedPageResult) => Promise<T>;
+  /** Return `null` to leave this outer page alone: its other inner pages are not fetched. */
+  processOuterPage: (firstInnerPage: NestedPageResult) => Promise<T | null>;
   processInnerPage: (page: NestedPageResult, outerContext: T) => Promise<void>;
 }): Promise<void> {
-  for (let outerPage = outerStartPage; outerPage <= outerEndPage; outerPage++) {
+  const outer = outerPages ?? {
+    *[Symbol.iterator]() {
+      for (let page = outerStartPage; page <= outerEndPage; page++) yield page;
+    },
+  };
+
+  for (const outerPage of outer) {
     const outerUrl = new URL(baseUrl);
     outerUrl.searchParams.set(outerParam, outerPage.toString());
     console.log(`Processing outer page ${outerPage}`);
@@ -169,6 +198,7 @@ export async function processNestedPages<T>({
       shouldStop: shouldStopInner,
       fetchOptions,
       encodings,
+      delayMs,
     })) {
       if (
         j == 0 &&
@@ -188,6 +218,7 @@ export async function processNestedPages<T>({
       if (isFirstInnerPage) {
         outerContext = await processOuterPage(nestedResult);
         isFirstInnerPage = false;
+        if (outerContext === null) break;
       }
 
       await processInnerPage(nestedResult, outerContext!);
