@@ -3,3 +3,4 @@
 .transiq/kaeru.log
 gtfs/*
 node_modules/
+dist/
