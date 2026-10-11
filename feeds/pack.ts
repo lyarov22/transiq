@@ -31,16 +31,20 @@ const outDir = process.env.PACK_OUT ?? "dist";
 const maxBareShare = Number(process.env.PACK_MAX_BARE_SHARE ?? 0.01);
 const only = process.env.PACK_ONLY?.split(",").map((id) => id.trim());
 
-const feeds = (await loadCisFeeds()).filter(
-  ({ feed }) => !only || only.includes(feed.id),
-);
+const everyFeed = await loadCisFeeds();
+const feeds = everyFeed.filter(({ feed }) => !only || only.includes(feed.id));
 
 await mkdir(join(outDir, "sk"), { recursive: true });
 const manifestPath = join(outDir, "manifest.json");
-const manifest: { generated: string; feeds: Record<string, FeedEntry> } =
-  (await exists(manifestPath))
-    ? JSON.parse(await readFile(manifestPath, "utf-8"))
-    : { generated: "", feeds: {} };
+const manifest: {
+  generated: string;
+  /** Every feed this build is meant to deliver, built or not: a consumer tells "ours, but missing" from "not ours". */
+  expected: string[];
+  feeds: Record<string, FeedEntry>;
+} = (await exists(manifestPath))
+  ? JSON.parse(await readFile(manifestPath, "utf-8"))
+  : { generated: "", expected: [], feeds: {} };
+manifest.expected = everyFeed.map(({ feed }) => feed.id);
 
 const failures: string[] = [];
 let built = 0;
