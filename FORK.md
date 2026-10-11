@@ -8,7 +8,7 @@ timetables of [portal.cp.sk](http://portal.cp.sk/) into GTFS. What differs:
 | | upstream | this fork |
 |---|---|---|
 | `xlsx2gtfs` | a run that does not call at the first stop of the table gets no `stop_times` and is written out as a trip anyway (≈ half of the regional buses) | fixed, with a test: `bun run test` → `cis/xlsx2gtfs/__tests__/blank-cells.mjs` |
-| scraper | every operator on the portal, a request as fast as the answer comes, a browser User-Agent, every file again on every run | only the operators in `cis/agencies.txt`; one request at a time, a pause of a second between any two; `bot/1.0`; a file that is already here is not fetched again |
+| scraper | every operator on the portal, a request as fast as the answer comes, a browser User-Agent, every file again on every run | only the operators our `cis` feeds read from; one request at a time, a pause of a second between any two; `bot/1.0`; a file that is already here is not fetched again |
 | output | `gtfs/` branch, after shapes (`morph`) | `dist/sk/<id>.zip` + `dist/manifest.json`, after a check (`feeds/pack.ts`); a feed that fails it is not published and keeps its previous file |
 | CI | daily, publishes to a branch | `workflow_dispatch` only; we run it on our own server (`deploy/build-timetables.sh` in punkto) |
 

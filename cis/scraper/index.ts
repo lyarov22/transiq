@@ -12,8 +12,8 @@ import {
 import { join } from "node:path";
 
 /**
- * Fetches the XLSX timetables from portal.cp.sk, for the operators in
- * `cis/agencies.txt`, into `.tmp/cp-sk/<operator>/`.
+ * Fetches the XLSX timetables from portal.cp.sk, for the operators our feeds are
+ * made of (the `cis` feeds in `feeds/sk/`), into `.tmp/cp-sk/<operator>/`.
  *
  * The portal is somebody else's server, so this is a guest on it:
  *
@@ -32,7 +32,7 @@ import { join } from "node:path";
  * portal no longer lists — but only when the first pass saw everything.
  *
  * Environment:
- *   CIS_AGENCIES    comma-separated operators, or `all`; default: cis/agencies.txt
+ *   CIS_AGENCIES    comma-separated operators, or `all`; default: the `cis` feeds of feeds/sk/
  *   CIS_OUTER_ONLY  comma-separated outer page numbers to visit (development)
  *   CIS_DELAY_MS    pause between requests, milliseconds (default 1000)
  *   CIS_USER_AGENT  the User-Agent header (default `bot/1.0`)
@@ -229,18 +229,27 @@ console.log(
 );
 if (totals.failed > 0 || (!outerOnly && missing.length > 0)) process.exit(1);
 
+/**
+ * The operators to follow: the folder names the `cis` feeds of `feeds/sk/` read
+ * from (`getLatestSource` → `{ type: "cis", id }`), so that adding a feed there is
+ * all it takes — a list kept beside them would drift. Read as text, not imported:
+ * the feed files of other types ask Google Drive when run.
+ */
 async function wantedAgencies(): Promise<Set<string> | null> {
   const fromEnv = process.env.CIS_AGENCIES?.trim();
   if (fromEnv === "all") return null;
+  if (fromEnv) return new Set(fromEnv.split(",").map((id) => id.trim()));
 
-  const text = fromEnv
-    ? fromEnv.split(",").join("\n")
-    : await readFile(join(import.meta.dir, "..", "agencies.txt"), "utf-8");
-  const ids = text
-    .split("\n")
-    .map((line) => line.replace(/#.*/, "").trim())
-    .filter(Boolean);
-  return new Set(ids);
+  const feedsDir = join(import.meta.dir, "..", "..", "feeds", "sk");
+  const ids = new Set<string>();
+  for (const file of await readdir(feedsDir)) {
+    if (!file.endsWith(".ts")) continue;
+    const source = await readFile(join(feedsDir, file), "utf-8");
+    for (const match of source.matchAll(/type:\s*"cis",\s*id:\s*"([^"]+)"/g))
+      ids.add(match[1]!);
+  }
+  if (ids.size === 0) throw new Error("no `cis` feeds found in feeds/sk/");
+  return ids;
 }
 
 /** `050111` for `L050111_260901_115603.xlsx`; null for a name of another shape. */

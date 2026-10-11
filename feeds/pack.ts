@@ -32,7 +32,7 @@ const maxBareShare = Number(process.env.PACK_MAX_BARE_SHARE ?? 0.01);
 const only = process.env.PACK_ONLY?.split(",").map((id) => id.trim());
 
 const feeds = (await loadCisFeeds()).filter(
-  (feed) => !only || only.includes(feed.id),
+  ({ feed }) => !only || only.includes(feed.id),
 );
 
 await mkdir(join(outDir, "sk"), { recursive: true });
@@ -45,11 +45,11 @@ const manifest: { generated: string; feeds: Record<string, FeedEntry> } =
 const failures: string[] = [];
 let built = 0;
 
-for (const feed of feeds) {
+for (const { feed, folder } of feeds) {
   try {
     let buffer: ArrayBuffer;
     try {
-      buffer = await getGftsZip(feed.id);
+      buffer = await getGftsZip(folder);
     } catch {
       console.warn(`${feed.id}: nothing converted for it, skipped`);
       continue;
@@ -108,15 +108,20 @@ interface FeedEntry {
 
 type Report = Omit<FeedEntry, "name" | "bytes" | "sha256">;
 
-/** The `cis` feeds of `feeds/sk/`, as the feeds loader reads them. */
-async function loadCisFeeds(): Promise<Feed[]> {
+/**
+ * The `cis` feeds of `feeds/sk/`, each with the folder its XLSX files were
+ * converted in (usually its own id; RegioJet's is `student-agency-ks`).
+ */
+async function loadCisFeeds(): Promise<{ feed: Feed; folder: string }[]> {
   const dir = join(import.meta.dir, "sk");
-  const found: Feed[] = [];
+  const found: { feed: Feed; folder: string }[] = [];
   for (const file of (await readdir(dir)).sort()) {
     if (!file.endsWith(".ts")) continue;
     // Read, not run: `getLatestSource` of the other feeds asks Google Drive.
     if (!/type:\s*"cis"/.test(await readFile(join(dir, file), "utf-8"))) continue;
-    found.push((await import(`./sk/${file}`)).default as Feed);
+    const feed = (await import(`./sk/${file}`)).default as Feed;
+    const source = await feed.getLatestSource();
+    if (source.type === "cis") found.push({ feed, folder: source.id });
   }
   return found;
 }
