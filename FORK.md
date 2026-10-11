@@ -38,3 +38,9 @@ as upstream does. `PACK_ONLY=sad-zilina-as bun feeds:pack` packs one feed.
 * **robots.txt.** `portal.cp.sk/robots.txt` disallows `/Search.aspx` and `/Down.aspx`
   for every robot. Upstream does the same, daily, from GitHub Actions. This fork asks
   for much less (see above) and says who it is, but it does not make that go away.
+* **A release that has not come into force yet replaces the one that has.** The portal
+  names files by the day they take effect (`261012`), and the scraper — like upstream's —
+  takes the newest release of a route. Today that is 5 routes of 1 210; before each
+  timetable change (13 December) it will be most of them, for the weeks between the
+  portal publishing the new release and its first day. The right answer is to keep both
+  and cut the old calendar off the day before the new one starts (`xlsx2gtfs`).
