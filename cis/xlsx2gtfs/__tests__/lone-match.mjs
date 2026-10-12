@@ -25,8 +25,16 @@ const km = (a, b, c, d) => {
   const x = Math.sin(dLat/2)**2 + Math.cos(rad(a))*Math.cos(rad(c))*Math.sin(dLon/2)**2;
   return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
 };
-function belongs(match, placed, districts) {
+function sameTown(cisName, name) {
+  if (!name) return false;
+  const town = v => v.split(",")[0].normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/[^a-z]/g, "");
+  const a = town(cisName), b = town(name), k = Math.min(5, a.length, b.length);
+  return k > 0 && a.slice(0, k) === b.slice(0, k);
+}
+function belongs(match, placed, districts, cisName = "") {
   if (match.country_code === HOME_COUNTRY) return true;
+  if (sameTown(cisName, match.name)) return true;
   if (placed.length < LONE_MATCH_MIN_CONTEXT) return true;
   if (!match.lat || !match.lon || match.lat === -1) return true;
   if (match.district && districts.includes(match.district)) return true;
@@ -61,6 +69,27 @@ const CASES = [
     match: { lat: 48.30392, lon: 18.08085, district: "Nitra", country_code: "SK" },
     placed: [{ lat: 48.1702, lon: 17.2127 }, { lat: 48.1486, lon: 17.1077 }],
     districts: ["Bratislava II"], want: true,
+  },
+  {
+    name: "Split, aut.kolodvor on a coach from Slovakia — abroad, the same town",
+    cis: "Split,,aut.kolodvor",
+    match: { lat: 43.5040, lon: 16.4400, district: "Grad Split", country_code: "HR", name: "Split, aut.kolodvor" },
+    placed: [{ lat: 48.1486, lon: 17.1077 }, { lat: 47.5000, lon: 16.9000 }],
+    districts: ["Bratislava I"], want: true,
+  },
+  {
+    name: "Budapest, Népliget — the database spells the town its own way",
+    cis: "Budapest,,Népliget aut.áll.",
+    match: { lat: 47.47451, lon: 19.09858, district: "IX. kerület", country_code: "HU", name: "Budapešť, Népliget aut.áll." },
+    placed: [{ lat: 48.7164, lon: 21.2611 }, { lat: 48.6000, lon: 21.0000 }],
+    districts: ["Košice"], want: true,
+  },
+  {
+    name: "Považ.Bystrica, žel.st. filed in the database as the Czech Bystřice",
+    cis: "Považ.Bystrica,,žel.st.",
+    match: { lat: 49.7406, lon: 14.66633, district: "Benešov", country_code: "CZ", name: "Bystřice, žel.st." },
+    placed: [{ lat: 49.0924, lon: 18.4164 }, { lat: 49.1144, lon: 18.4453 }],
+    districts: ["Považská Bystrica"], want: false,
   },
   {
     name: "a Czech stop the route has not been near is still refused",
@@ -99,7 +128,7 @@ const CASES = [
 ];
 let bad = 0;
 for (const c of CASES) {
-  const got = belongs(c.match, c.placed, c.districts);
+  const got = belongs(c.match, c.placed, c.districts, c.cis);
   const ok = got === c.want;
   if (!ok) bad++;
   console.log(`  ${ok ? "ok  " : "FAIL"} ${c.name}: took=${got}, expected=${c.want}`);

@@ -54,6 +54,36 @@ const LONE_MATCH_MIN_CONTEXT = 2;
 const HOME_COUNTRY = "SK";
 
 /**
+ * Does the database entry name the same town as the timetable does?
+ *
+ * Abroad, the matches the test refused after the change above were almost all
+ * real: the coaches to Split, Zadar, Praha, Brno and Budapest, whose stops are
+ * hundreds of kilometres from the rest of the route because that is where the
+ * route goes. The wrong ones were not wrong places so much as wrong entries —
+ * `Považ.Bystrica,,žel.st.` is filed in the database as `Bystřice, žel.st.`, and
+ * `Slovenské N.Mesto,,rázc.št.hr.` as `Hradec Králové, Terminál HD`. The town
+ * before the first comma says which is which: the same town, spelt the database's
+ * way (`Budapest` → `Budapešť`), or a different one.
+ *
+ * Compared on the first five letters without diacritics, which is what survives
+ * both the timetable's abbreviations and the database's translations.
+ */
+function sameTown(cisName: string, name?: string): boolean {
+  if (!name) return false;
+  const town = (value: string) =>
+    value
+      .split(",")[0]!
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z]/g, "");
+  const a = town(cisName);
+  const b = town(name);
+  const k = Math.min(5, a.length, b.length);
+  return k > 0 && a.slice(0, k) === b.slice(0, k);
+}
+
+/**
  * Does this lone match belong to the route being converted?
  *
  * `queryAllStopsByCisName` matches on the name alone, and the disambiguation
@@ -79,13 +109,18 @@ const HOME_COUNTRY = "SK";
  * describe one thing: a stop that is both somewhere the route has not been and
  * far from anywhere it has.
  */
-function belongsToRoute(match: {
-  lat?: number;
-  lon?: number;
-  district?: string;
-  country_code?: string;
-}): boolean {
+function belongsToRoute(
+  match: {
+    lat?: number;
+    lon?: number;
+    district?: string;
+    country_code?: string;
+    name?: string;
+  },
+  cisName: string,
+): boolean {
   if (match.country_code === HOME_COUNTRY) return true;
+  if (sameTown(cisName, match.name)) return true;
   const placed = routeContextCache.lastResolvedStops.filter(
     (stop) => stop.stop_lat !== -1 && stop.stop_lon !== -1,
   );
@@ -137,7 +172,7 @@ export function resolvePartialGtfsStop(stop: PartialGtfsStop): GtfsStop {
   if (matches.length === 1) {
     const kaeruStop = matches[0]!;
 
-    if (!belongsToRoute(kaeruStop)) {
+    if (!belongsToRoute(kaeruStop, stop.metadata.cis_name)) {
       console.warn(
         `Only match for stop ${stop.metadata.cis_name} is in district ` +
           `${kaeruStop.district} and far from the rest of the route — ` +
