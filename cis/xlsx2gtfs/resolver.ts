@@ -34,6 +34,26 @@ const LONE_MATCH_MAX_KM = 50;
 const LONE_MATCH_MIN_CONTEXT = 2;
 
 /**
+ * The country whose timetables this converter reads (portal.cp.sk), whose stops
+ * are taken without the test.
+ *
+ * The test cost more than it saved at home. Measured on the build of 12 October
+ * 2026: 311 lone matches refused, 18 575 calls left at `-1, -1` — and most of
+ * them real stops on express routes, which enter a new district from far away by
+ * definition. Bratislava Letisko → Nitra AS is 80 km into okres Nitra, so the
+ * main bus station of Nitra was refused on three routes carrying 998 calls a
+ * timetable, and Prešov AS the same.
+ *
+ * A domestic namesake is still caught, one step later and better: the consumer's
+ * sanitiser (punkto `harvester/sanitize_feed.py`) judges every call by the speed
+ * between its neighbours and the timetable's own minutes, which this resolver
+ * does not have. It knows Biskupice and Prešov, Levočská by name. What it cannot
+ * tell apart is a stop abroad that the route really reaches, so the test stays
+ * for those — it is the Czech Bystřice that it was written for.
+ */
+const HOME_COUNTRY = "SK";
+
+/**
  * Does this lone match belong to the route being converted?
  *
  * `queryAllStopsByCisName` matches on the name alone, and the disambiguation
@@ -63,7 +83,9 @@ function belongsToRoute(match: {
   lat?: number;
   lon?: number;
   district?: string;
+  country_code?: string;
 }): boolean {
+  if (match.country_code === HOME_COUNTRY) return true;
   const placed = routeContextCache.lastResolvedStops.filter(
     (stop) => stop.stop_lat !== -1 && stop.stop_lon !== -1,
   );

@@ -6,17 +6,19 @@
  * match was taken unconditionally — and that is the case that goes wrong, because
  * the one match can be a namesake somewhere else entirely.
  *
- * The three failing cases below are real, taken from the published feeds. The five
- * passing ones are the shapes a stricter rule would have broken: a route crossing
- * into the neighbouring district, an express coach with a two-hundred-kilometre
- * leg, the first stop of a route, and a route with only one stop placed so far.
+ * The namesakes below are real, taken from the published feeds. Since the build of
+ * 12 October 2026 a Slovak match is always taken — the namesakes at home are left to
+ * the consumer's sanitiser, which judges the speed between neighbours — and only a
+ * match abroad is tested. The rest are the shapes a stricter rule would break: a
+ * route crossing into the neighbouring district, an express coach with a long leg,
+ * the first stop of a route, and a route with only one stop placed so far.
  *
  *   node cis/xlsx2gtfs/__tests__/lone-match.mjs
  *
  * Kept as a standalone script because the repository has no test runner; it exits
  * non-zero on a disagreement, which is all a CI step needs.
  */
-const LONE_MATCH_MAX_KM = 50, LONE_MATCH_MIN_CONTEXT = 2;
+const LONE_MATCH_MAX_KM = 50, LONE_MATCH_MIN_CONTEXT = 2, HOME_COUNTRY = "SK";
 const R = 6371, rad = d => d * Math.PI / 180;
 const km = (a, b, c, d) => {
   const dLat = rad(c - a), dLon = rad(d - b);
@@ -24,6 +26,7 @@ const km = (a, b, c, d) => {
   return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
 };
 function belongs(match, placed, districts) {
+  if (match.country_code === HOME_COUNTRY) return true;
   if (placed.length < LONE_MATCH_MIN_CONTEXT) return true;
   if (!match.lat || !match.lon || match.lat === -1) return true;
   if (match.district && districts.includes(match.district)) return true;
@@ -36,21 +39,34 @@ function belongs(match, placed, districts) {
 const CASES = [
   {
     name: "Bystřice, žel.st. on route 306402 — the Czech namesake, 285 km away",
-    match: { lat: 49.740601, lon: 14.66633, district: "Benešov" },
+    match: { lat: 49.740601, lon: 14.66633, district: "Benešov", country_code: "CZ" },
     placed: [{ lat: 49.0924, lon: 18.4164 }, { lat: 49.1144, lon: 18.4453 }],
     districts: ["Považská Bystrica"], want: false,
   },
   {
-    name: "Biskupice,nám. on route 60474 — the Bánovce namesake, 129 km away",
-    match: { lat: 48.708939, lon: 18.24102, district: "Bánovce nad Bebravou" },
+    // Domestic: taken here, refused downstream by the sanitiser on speed.
+    name: "Biskupice,nám. on route 60474 — a Slovak namesake, left to the sanitiser",
+    match: { lat: 48.708939, lon: 18.24102, district: "Bánovce nad Bebravou", country_code: "SK" },
     placed: [{ lat: 48.2707, lon: 19.8231 }, { lat: 48.2890, lon: 19.8650 }],
-    districts: ["Lučenec"], want: false,
+    districts: ["Lučenec"], want: true,
   },
   {
-    name: "Prešov, Levočská — resolved into okres Poprad, 67 km away",
-    match: { lat: 49.0587, lon: 20.2986, district: "Poprad" },
+    name: "Prešov, Levočská — okres Poprad, Slovak, left to the sanitiser",
+    match: { lat: 49.0587, lon: 20.2986, district: "Poprad", country_code: "SK" },
     placed: [{ lat: 48.9975, lon: 21.2393 }, { lat: 49.0005, lon: 21.2242 }],
-    districts: ["Prešov"], want: false,
+    districts: ["Prešov"], want: true,
+  },
+  {
+    name: "Nitra, AS on an express from Bratislava Letisko — 80 km into a new district",
+    match: { lat: 48.30392, lon: 18.08085, district: "Nitra", country_code: "SK" },
+    placed: [{ lat: 48.1702, lon: 17.2127 }, { lat: 48.1486, lon: 17.1077 }],
+    districts: ["Bratislava II"], want: true,
+  },
+  {
+    name: "a Czech stop the route has not been near is still refused",
+    match: { lat: 49.8209, lon: 18.2625, district: "Ostrava-město", country_code: "CZ" },
+    placed: [{ lat: 48.7164, lon: 21.2611 }, { lat: 48.7200, lon: 21.2500 }],
+    districts: ["Košice"], want: false,
   },
   {
     name: "a stop in the route\u2019s own district is taken",
