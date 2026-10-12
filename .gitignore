@@ -1,6 +1,7 @@
 .env
 .tmp/*
 .transiq/kaeru.log
+.transiq/kaeru-extra.csv
 gtfs/*
 node_modules/
 dist/

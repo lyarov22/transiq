@@ -32,8 +32,12 @@ as upstream does. `PACK_ONLY=sad-zilina-as bun feeds:pack` packs one feed.
 ## Known limits
 
 * **Stops.** Coordinates come from `.transiq/kaeru.csv`, a snapshot of ≈ 14 000 stop
-  names. A stop that is not in it, or is ambiguous, gets `-1,-1` and stays in the feed
-  (the consumer has to drop those; punkto's `harvester/sanitize_feed.py` does).
+  names, and from `.transiq/kaeru-extra.csv` when it exists: the same format, for
+  names the snapshot does not have, written by the deployment (punkto's
+  `harvester/stop_places.py`, from Ubian and from the snapshot's own renamed stops —
+  the portal now says `Štúrovo,,AS` where the snapshot has `Štúrovo,,aut.st.`). A stop
+  in neither, or ambiguous, gets `-1,-1` and stays in the feed (the consumer has to
+  drop those; punkto's `harvester/sanitize_feed.py` does).
 * **Shapes** (`morph`) are not built here; the routers snap to the road network.
 * **robots.txt.** `portal.cp.sk/robots.txt` disallows `/Search.aspx` and `/Down.aspx`
   for every robot. Upstream does the same, daily, from GitHub Actions. This fork asks

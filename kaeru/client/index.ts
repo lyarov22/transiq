@@ -3,13 +3,33 @@ import { parse as parseCsv } from "csv-parse/sync";
 import type { KaeruCsvItem } from "kaeru/types";
 
 const csvPath = join(".transiq", "kaeru.csv");
-const content = await Bun.file(csvPath).text();
-const data = parseCsv<KaeruCsvItem>(content, {
-  columns: true,
-  skip_empty_lines: true,
-  trim: true,
-  cast: true,
-});
+
+// Places for the stops the snapshot does not have, written by the deployment
+// (punkto's `harvester/stop_places.py`) in the same format. Mostly stops the
+// portal renamed since the snapshot was taken — `Štúrovo,,AS` for
+// `Štúrovo,,aut.st.` — which would otherwise come out at -1,-1. A name the
+// snapshot has is taken from the snapshot: this file only adds.
+const extraPath = join(".transiq", "kaeru-extra.csv");
+
+function readCsv(content: string): KaeruCsvItem[] {
+  return parseCsv<KaeruCsvItem>(content, {
+    columns: true,
+    skip_empty_lines: true,
+    trim: true,
+    cast: true,
+  });
+}
+
+const data = readCsv(await Bun.file(csvPath).text());
+const extraFile = Bun.file(extraPath);
+if (await extraFile.exists()) {
+  const known = new Set(data.map((item) => item.cis_name));
+  const extra = readCsv(await extraFile.text()).filter(
+    (item) => !known.has(item.cis_name),
+  );
+  data.push(...extra);
+  console.log(`Kaeru: ${extra.length} stops added from ${extraPath}`);
+}
 
 export function queryAllStopsByCisName(cisName: string): KaeruCsvItem[] {
   return data.filter((item) => item.cis_name === cisName);
